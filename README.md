@@ -4,9 +4,13 @@ Our goal for this project is to make training large models simple, so that there
 ## 📝Introduction
 Firstly, I would like to clarify that due to the smaller size of our model parameters, it is likely not on par with large models like GPT-4. Competing with them is also not our objective. Our goals are as follows:
 
-To gradually master the general skills of training large models under extremely low-cost conditions.
-To be able to quickly experiment with and evaluate the merits and drawbacks of different model structures.
-To truly enter the field of large model algorithm development. In fact, if you find a good model structure that performs well with a small number of parameters and a small dataset, you can switch to a server with 10 cards of the H200 type, spend ten days, and work with a large dataset and a large model structure to train a model of around 10 billion parameters.
+1 To gradually master the general skills of training large models under extremely low-cost conditions.
+
+2 To be able to quickly experiment with and evaluate the merits and drawbacks of different model structures.
+
+3 To truly enter the field of large model algorithm development. 
+
+In fact, if you find a good model structure that performs well with a small number of parameters and a small dataset, you can switch to a server with 10 cards of the H200 type, spend ten days, and work with a large dataset and a large model structure to train a model of around 10 billion parameters.
 
 
 
