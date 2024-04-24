@@ -26,12 +26,12 @@ from model.qwen.tokenization_qwen import QWenTokenizer
 # %%
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
-
 attn_implementation = "flash_attention_2"
 try:
     from flash_attn import flash_attn_func
 except Exception as e:
     attn_implementation = "eager"
+
 
 # %% [markdown]
 # # 1. 训练数据来源
@@ -72,7 +72,6 @@ TRAIN_FILES = [
 EVAL_FILE = "./datasets/pretrain_eval_512_1w.parquet"
 EVAL_FILE = "./datasets/wiki_fi.parquet"
 
-# %%
 
 
 @dataclass
@@ -92,28 +91,16 @@ class PretrainArguments:
 
 pretrain_args = PretrainArguments()
 
-# %% [markdown]
-# # 2. 加载训练好的tokenizer
-# 如果你使用的`add_tokens`方法添加了自己的token，必须要用`len(tokenizer)`获取长度，`tokenizer.vocab_size`统计不包含你添加的字符。
 
-# %%
 tokenizer = QWenTokenizer.from_pretrained(pretrain_args.tokenizer_dir)
 tokenizer.pad_token_id = tokenizer.im_end_id
-# %% [markdown]
-# # 5. 定义模型
-# 从`config`定义，不是`from_pretrained`。
-# 为了方便cuda计算，词表的大小注意一下，如果不是64的整数倍，可以手动向上取整为64的整数倍，也可以是其他 $2^x$ 数值的整数倍，如32、128、256都行。
 
-# %%
 vocab_size = len(tokenizer)
 if vocab_size % 64 != 0:
     vocab_size = (vocab_size // 64 + 1) * 64
 print(f"final vocab sieze: {vocab_size}")
 
-# %% [markdown]
-# ## token to id缓存到文件，使用的时候不用再次tokenize
-# 如果词表大小小于 65535 用uint16存储，节省磁盘空间，否则用uint32存储
-# %%
+
 map_dtype = np.uint16 if vocab_size < 65535 else np.uint32
 
 
@@ -132,9 +119,7 @@ def token_to_id(samples: dict) -> dict:
     return {"input_ids": input_ids}
 
 
-# print(token_to_id({'text':['判断给定的文章是否符合语法规则。如果不符合，请提供修改建议。\n','下面是一篇文章的开头: "为了探讨这个主题，本文将提供一系列数据和实例，以证明这一观点。']}))
 
-# step 3 加载数据集
 
 
 # %%
@@ -161,16 +146,9 @@ train_dataset = get_maped_dataset(pretrain_args.train_files)
 eval_dataset = get_maped_dataset(pretrain_args.eval_file)
 
 print(train_dataset, eval_dataset)
-# %% [markdown]
-# # 4. 定义data_collator
-# `mlm=False`表示要训练CLM模型，`mlm=True`表示要训练MLM模型
 
-# %%
 data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
 
-# %%
-# 如果配置了flash_attention_2，请手动设置set_default_dtype为float16
-#  Flash Attention 2.0 only supports torch.float16 and torch.bfloat16 dtypes.
 if pretrain_args.attn_implementation == "flash_attention_2":
     torch.set_default_dtype(torch.float16)
     #torch.set_default_dtype(torch.bfloat16)
@@ -183,11 +161,7 @@ model = QWenLMHeadModel(config)
 model_size = sum(t.numel() for t in model.parameters())
 print(f"QWen size: {model_size / 1000**2:.1f}M parameters")
 
-# %% [markdown]
-# # 6. cuda cache回调函数
 
-
-# %%
 class MyTrainerCallback(TrainerCallback):
     log_cnt = 0
 
@@ -220,73 +194,61 @@ class MyTrainerCallback(TrainerCallback):
         control.should_save = True
         return control
 
+def train():
+    my_trainer_callback = MyTrainerCallback()   
 
-my_trainer_callback = MyTrainerCallback()
+    args = TrainingArguments(
+        output_dir=pretrain_args.model_save_dir,
+        per_device_train_batch_size=8,
+        per_device_eval_batch_size=8,
+        gradient_accumulation_steps=10,
+        num_train_epochs=1,
+        weight_decay=0.1,
+        ddp_find_unused_parameters=False,
+        warmup_steps=0,
+        learning_rate=1e-3,
+        evaluation_strategy="steps",
+        eval_steps=9000,
+        save_steps=5000,
+        save_strategy="steps",
+        save_total_limit=4,
+        report_to="tensorboard",
+        optim="adamw_torch",
+        lr_scheduler_type="cosine",
+        fp16=True,
+        bf16=False,
+        logging_steps=20,
+        log_level="info",
+        logging_first_step=True,
+        # group_by_length=True,
+        # deepspeed='./ds_config_one_gpu.json',
+    )
+    
+    trainer = Trainer(
+        model=model,
+        tokenizer=tokenizer,
+        args=args,
+        data_collator=data_collator,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        callbacks=[my_trainer_callback],
+    )
 
-# %% [markdown]
-# # 6. 定义训练参数
+    trainer.train(  )
+    
 
-# %%
-args = TrainingArguments(
-    output_dir=pretrain_args.model_save_dir,
-    per_device_train_batch_size=8,
-    per_device_eval_batch_size=8,
-    gradient_accumulation_steps=10,
-    num_train_epochs=1,
-    weight_decay=0.1,
-    ddp_find_unused_parameters=False,
-    warmup_steps=0,
-    learning_rate=1e-3,
-    evaluation_strategy="steps",
-    eval_steps=9000,
-    save_steps=5000,
-    save_strategy="steps",
-    save_total_limit=4,
-    report_to="tensorboard",
-    optim="adamw_torch",
-    lr_scheduler_type="cosine",
-    fp16=True,
-    bf16=False,
-    logging_steps=20,
-    log_level="info",
-    logging_first_step=True,
-    # group_by_length=True,
-    # deepspeed='./ds_config_one_gpu.json',
-)
+    eval_results = trainer.evaluate()
+    print(f"Perplexity: {np.exp(eval_results['eval_loss']):.2f}")
+    
 
-trainer = Trainer(
-    model=model,
-    tokenizer=tokenizer,
-    args=args,
-    data_collator=data_collator,
-    train_dataset=train_dataset,
-    eval_dataset=eval_dataset,
-    callbacks=[my_trainer_callback],
-)
-
-# %% [markdown]
-# # 7. 开始训练
-# `resume_from_checkpoint=True`参数可以从上次保存的检查点继续训练
-
-# %%
-trainer.train(  #'model_save/pre/checkpoint-3400'
-    # resume_from_checkpoint=True
-)
-
-# %% [markdown]
-#  计算困惑度Perplexity
-
-# %%
-eval_results = trainer.evaluate()
-print(f"Perplexity: {np.exp(eval_results['eval_loss']):.2f}")
-
-# %% [markdown]
-# # 8. 最后保存训练的loss日志和模型
-
-# %%
-
-# loss_log = pd.DataFrame(trainer.state.log_history)
-# loss_log.to_csv(f"./logs/pre_train_log_{time.strftime('%Y%m%d-%H%M')}.csv")
+    
+    
+    trainer.save_model(pretrain_args.model_save_dir)
 
 
-trainer.save_model(pretrain_args.model_save_dir)
+if __name__ =='__main__':
+    train()
+
+
+
+
