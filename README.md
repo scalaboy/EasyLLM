@@ -1,4 +1,4 @@
-#EasyLLM 
+# EasyLLM 
 we want to train llm in easy type,
 Our goal for this project is to make training large models simple, so that there are no difficult-to-train large models in the world.
 ## 📝Introduction
