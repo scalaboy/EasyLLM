@@ -18,9 +18,9 @@ from transformers import (
 from transformers.trainer_callback import TrainerControl, TrainerState
 
 from datasets import Dataset, load_dataset
-from qwen.configuration_qwen import QWenConfig
-from qwen.modeling_qwen import QWenLMHeadModel
-from qwen.tokenization_qwen import QWenTokenizer
+from model.qwen.configuration_qwen import QWenConfig
+from model.qwen.modeling_qwen import QWenLMHeadModel
+from model.qwen.tokenization_qwen import QWenTokenizer
 
 # torch._dynamo.config.optimize_ddp = False
 # %%
@@ -77,8 +77,8 @@ EVAL_FILE = "./datasets/wiki_fi.parquet"
 
 @dataclass
 class PretrainArguments:
-    tokenizer_dir: str = "./qwen/"
-    model_save_dir: str = "./model_save/pre/"
+    tokenizer_dir: str = "./model/qwen/"
+    model_save_dir: str = "./ckpt/pt/"
     logs_dir: str = "./logs/"
     train_files: list = field(default_factory=lambda: TRAIN_FILES)
     eval_file: str = EVAL_FILE
@@ -176,7 +176,7 @@ if pretrain_args.attn_implementation == "flash_attention_2":
     #torch.set_default_dtype(torch.bfloat16)
 
 
-config = QWenConfig.from_pretrained("./qwen")
+config = QWenConfig.from_pretrained("./model/qwen")
 # model = QWenLMHeadModel.from_pretrained("./1")
 model = QWenLMHeadModel(config)
 
