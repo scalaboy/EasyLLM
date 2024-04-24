@@ -132,8 +132,10 @@ python3 test.py
 
 
 
-## 其他
-有什么问题和想一起搞大模型的可以加wx:ForeverM1LAn 进行交流
+## Acknowledgement
+1 https://github.com/charent/Phi2-mini-Chinese
+2 https://github.com/DLLXW/baby-llama2-chinese
+3 https://github.com/jiahe7ay/MINI_LLM
 
 
 
